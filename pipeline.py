@@ -173,6 +173,35 @@ def run(report: str, gme_manual_krw=None, log_history=True, post_to_teams=False)
         return status
 
 
+def send_to_teams(report: str) -> dict:
+    """Posts the current price_history.db snapshot to Teams without
+    re-fetching - the cloud dashboard's manual "Send to Teams" button, same
+    "send exactly what was last reviewed, don't silently re-fetch" reasoning
+    as the laptop dashboard's separate Refresh/Send-to-Workflow buttons.
+    Shares _PIPELINE_LOCK and REPORTS status key with run() (same as a
+    concurrent cron run and a manual Refresh already do) rather than adding
+    a parallel status channel."""
+    with _PIPELINE_LOCK:
+        started = time.time()
+        gcs_sync.write_status(report, {"state": "running", "startedAt": started})
+        try:
+            render_png(report, stale_pairs=set())
+            teams_post.post_to_teams(report, PROJECT_ROOT / f"table_data_{report}.json")
+            status = {"state": "success", "startedAt": started, "finishedAt": time.time()}
+        except Exception as e:  # noqa: BLE001
+            status = {
+                "state": "error",
+                "startedAt": started,
+                "finishedAt": time.time(),
+                "error": str(e),
+                "traceback": traceback.format_exc(),
+            }
+            gcs_sync.write_status(report, status)
+            raise
+        gcs_sync.write_status(report, status)
+        return status
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--report", required=True, choices=["thailand", "laos"])

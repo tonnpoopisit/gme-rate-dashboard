@@ -48,6 +48,12 @@
   }
   button.refresh:disabled { background: #475569; cursor: default; }
   button.refresh:hover:not(:disabled) { background: var(--accent-dim); }
+  button.send-teams {
+    background: var(--green); border: none; color: #0f172a; padding: .5rem 1rem; border-radius: 8px;
+    cursor: pointer; font-weight: 600; font-size: .85rem;
+  }
+  button.send-teams:disabled { background: #475569; color: white; cursor: default; }
+  button.send-teams:hover:not(:disabled) { filter: brightness(0.9); }
   .manual-gme { display: flex; gap: .35rem; align-items: center; }
   .manual-gme input { width: 110px; padding: .35rem .5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: .8rem; }
   .manual-gme button { padding: .35rem .6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-size: .75rem; cursor: pointer; }
@@ -388,6 +394,7 @@ async function loadOverview() {
         <div class="controls">
           ${manualGmeHtml}
           <button class="refresh" id="refresh-${cfg.key}" onclick="refreshReport('${cfg.key}')">Refresh</button>
+          <button class="send-teams" id="send-teams-${cfg.key}" onclick="sendToTeams('${cfg.key}')">Send to Teams</button>
         </div>
       </div>
       ${pngHtml}
@@ -684,7 +691,7 @@ async function refreshReport(reportKey, manual) {
     });
     const data = await res.json();
     if (!res.ok) { alert(data.error || "Failed to start refresh"); btn.disabled = false; btn.textContent = "Refresh"; return; }
-    pollJob(data.jobId, reportKey);
+    pollJob(data.jobId, `refresh-${reportKey}`, "Refresh", reportKey, "refresh");
   } catch (e) {
     alert("Network error starting refresh");
     btn.disabled = false;
@@ -692,16 +699,40 @@ async function refreshReport(reportKey, manual) {
   }
 }
 
-async function pollJob(jobId, reportKey) {
-  const btn = document.getElementById(`refresh-${reportKey}`);
+async function sendToTeams(reportKey) {
+  const label = reportKey === "laos" ? "Laos" : "Thailand";
+  if (!confirm(`Post the current ${label} ranking table to Teams now? This does not re-fetch rates - it sends whatever Refresh last showed.`)) return;
+
+  const btn = document.getElementById(`send-teams-${reportKey}`);
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+
+  try {
+    const res = await fetch("/api/send-to-teams", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report: reportKey }),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || "Failed to start Teams post"); btn.disabled = false; btn.textContent = "Send to Teams"; return; }
+    pollJob(data.jobId, `send-teams-${reportKey}`, "Send to Teams", reportKey, "post to Teams");
+  } catch (e) {
+    alert("Network error starting Teams post");
+    btn.disabled = false;
+    btn.textContent = "Send to Teams";
+  }
+}
+
+async function pollJob(jobId, btnId, idleText, reportKey, actionLabel) {
+  const btn = document.getElementById(btnId);
   const poll = async () => {
     const res = await fetch(`/api/job/${jobId}`);
     const status = await res.json();
     if (status.state === "success" || status.state === "error") {
       btn.disabled = false;
-      btn.textContent = "Refresh";
+      btn.textContent = idleText;
       await loadOverview();
-      if (status.state === "error") alert(`${reportKey} refresh failed: ${status.error || "unknown error"}`);
+      if (status.state === "error") alert(`${reportKey} ${actionLabel} failed: ${status.error || "unknown error"}`);
       return;
     }
     setTimeout(poll, 2000);

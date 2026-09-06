@@ -408,6 +408,25 @@ def api_job(job_id):
     return jsonify(gcs_sync.read_status(report))
 
 
+def _send_to_teams_job(report):
+    try:
+        pipeline.send_to_teams(report)
+    except Exception:  # noqa: BLE001 - status is already recorded by pipeline.send_to_teams
+        pass
+
+
+@app.route("/api/send-to-teams", methods=["POST"])
+def api_send_to_teams():
+    data = request.get_json(force=True, silent=True) or {}
+    report = data.get("report")
+    if report not in REPORTS:
+        return jsonify({"error": f"Unknown report '{report}'"}), 400
+
+    job_id = f"{report}-{uuid.uuid4().hex[:8]}"
+    threading.Thread(target=_send_to_teams_job, args=(report,), daemon=True).start()
+    return jsonify({"jobId": job_id, "report": report})
+
+
 @app.route("/api/cron/run", methods=["POST", "GET"])
 def api_cron_run():
     cron_key = request.headers.get("X-Cron-Key") or request.args.get("key")
