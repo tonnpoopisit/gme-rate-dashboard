@@ -108,25 +108,13 @@ def render_png(report: str, stale_pairs: set) -> str:
     png_path = PROJECT_ROOT / PNG_NAMES[report]
     json_path.write_text(json.dumps(table))
 
+    # Plain full-quality render for both reports - no --compact/palette
+    # quantization. That used to be needed because this same PNG was also
+    # embedded as base64 in the Teams webhook body, which hard-rejects
+    # payloads over ~28KB; Teams now fetches the image via a public URL
+    # instead (see teams_post.py), so nothing here is size-constrained
+    # anymore and the table can render at full, legible resolution.
     args = [sys.executable, str(PROJECT_ROOT / "render_table_png.py"), str(json_path), str(png_path)]
-    if report != "laos":
-        # --compact: this PNG doubles as the Teams webhook attachment (see
-        # teams_post.py), which hard-rejects bodies over ~28KB once wrapped -
-        # a default-quality Thailand render alone runs 130KB+, so render
-        # compact unconditionally rather than only when actually posting.
-        args += ["--compact"]
-    if report == "laos":
-        # 16 was too aggressive: with ~10 distinct flat colors (6 provider
-        # backgrounds + white/black/border-grey/negative-gap-red) plus every
-        # anti-aliased text/border edge adding its own blended shades, the
-        # adaptive palette dropped GME's rarely-used salmon (#F4777F, only
-        # 1-2 small cells) in favor of more pixel-frequent colors - it came
-        # out as a wrong, muddy (204,147,154) instead (confirmed via direct
-        # pixel sampling, not guessed). 64 keeps real file-size savings
-        # (Laos's table is much smaller than Thailand's, which uses the
-        # unquantized default of 32) while giving the palette enough room to
-        # keep every semantic color true.
-        args += ["--compact", "--font-size", "11", "--pad-v", "2", "--pad-h", "5", "--colors", "64"]
     subprocess.run(args, check=True, cwd=str(PROJECT_ROOT))
 
     gcs_sync.upload_png(report, png_path)
@@ -152,7 +140,7 @@ def run(report: str, gme_manual_krw=None, log_history=True, post_to_teams=False)
                     # the try below) - same as the laptop pipeline treating a
                     # failed Send-TeamsImage as a whole-run failure, since the
                     # entire point of a scheduled run is to post.
-                    teams_post.post_to_teams(report, PROJECT_ROOT / f"table_data_{report}.json")
+                    teams_post.post_to_teams(report, PROJECT_ROOT / PNG_NAMES[report])
             status = {
                 "state": "success",
                 "startedAt": started,
@@ -186,7 +174,7 @@ def send_to_teams(report: str) -> dict:
         gcs_sync.write_status(report, {"state": "running", "startedAt": started})
         try:
             render_png(report, stale_pairs=set())
-            teams_post.post_to_teams(report, PROJECT_ROOT / f"table_data_{report}.json")
+            teams_post.post_to_teams(report, PROJECT_ROOT / PNG_NAMES[report])
             status = {"state": "success", "startedAt": started, "finishedAt": time.time()}
         except Exception as e:  # noqa: BLE001
             status = {

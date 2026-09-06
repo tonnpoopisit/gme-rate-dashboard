@@ -20,6 +20,14 @@ import price_history
 
 GCS_BUCKET = os.environ.get("GCS_BUCKET", "").strip()
 
+# Separate, dedicated bucket (public objectViewer for allUsers) just for the
+# two rendered PNGs Teams needs to fetch directly - see teams_post.py. Kept
+# entirely separate from GCS_BUCKET (which holds price_history.db and run
+# status, both private) rather than making individual objects public there,
+# since GCS_BUCKET has uniform bucket-level access enabled and so can only
+# grant public read at the whole-bucket level, not per-object.
+PUBLIC_GCS_BUCKET = os.environ.get("PUBLIC_GCS_BUCKET", "").strip()
+
 # Cache downloads for a short window so a burst of dashboard page loads
 # doesn't re-download the DB from GCS on every single request.
 _DOWNLOAD_CACHE_SECONDS = 30
@@ -80,6 +88,22 @@ def upload_png(report: str, local_path: Path):
         return
     bucket = _client().bucket(GCS_BUCKET)
     bucket.blob(local_path.name).upload_from_filename(str(local_path))
+
+
+def upload_public_png(local_path: Path) -> str:
+    """Uploads a copy of local_path to PUBLIC_GCS_BUCKET and returns its
+    stable public URL - used for the Teams card's Image url so Teams' own
+    servers fetch the image directly, rather than embedding it as base64 in
+    the webhook body (which has a hard ~28KB limit the rendered table has
+    already outgrown once - see teams_post.py's git history). Full quality,
+    no compaction needed, since this is no longer size-constrained.
+    Raises if PUBLIC_GCS_BUCKET isn't configured (local dev has no public
+    bucket to publish to)."""
+    if not PUBLIC_GCS_BUCKET:
+        raise RuntimeError("PUBLIC_GCS_BUCKET not configured - can't publish an image for Teams to fetch")
+    bucket = _client().bucket(PUBLIC_GCS_BUCKET)
+    bucket.blob(local_path.name).upload_from_filename(str(local_path))
+    return f"https://storage.googleapis.com/{PUBLIC_GCS_BUCKET}/{local_path.name}"
 
 
 def download_png(report: str, local_path: Path) -> bool:
