@@ -90,6 +90,31 @@ def upload_png(report: str, local_path: Path):
     bucket.blob(local_path.name).upload_from_filename(str(local_path))
 
 
+def download_known_fees(path: Path):
+    """Pulls the latest known_fees.json from GCS to `path`, if a bucket is
+    configured - mirrors download_db's persistence-across-cold-starts fix,
+    which this file never got originally (confirmed: no known_fees.json ever
+    showed up in the bucket, so a fee change the daily checker found was
+    being silently lost whenever the container scaled to zero before the
+    next rate-fetch run read it back). No caching (unlike download_db): this
+    file is tiny and read far less often, so a fresh pull every call is
+    cheap and always correct. Takes path explicitly (rather than importing
+    known_fees for its DEFAULT_PATH) to avoid a circular import, since
+    known_fees.py is the one importing this module."""
+    if not GCS_BUCKET:
+        return
+    blob = _client().bucket(GCS_BUCKET).blob("known_fees.json")
+    if blob.exists():
+        blob.download_to_filename(str(path))
+
+
+def upload_known_fees(path: Path):
+    """Pushes a freshly-written known_fees.json back to GCS."""
+    if not GCS_BUCKET or not path.exists():
+        return
+    _client().bucket(GCS_BUCKET).blob("known_fees.json").upload_from_filename(str(path))
+
+
 def upload_public_png(local_path: Path) -> str:
     """Uploads a copy of local_path to PUBLIC_GCS_BUCKET and returns its
     stable public URL - used for the Teams card's Image url so Teams' own
