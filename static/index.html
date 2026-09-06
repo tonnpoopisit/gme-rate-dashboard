@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GME Rate Dashboard</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f172a; --panel: #1e293b; --panel-2: #16213a; --border: #334155;
+    --text: #f1f5f9; --muted: #94a3b8; --accent: #3b82f6; --accent-dim: #1d4ed8;
+    --green: #34d399; --red: #f87171; --gme: #fbbf24; --stale: #f59e0b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg); color: var(--text); padding: 1.5rem;
+  }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: .5rem; }
+  h1 { font-size: 1.3rem; margin: 0; }
+  header a { color: var(--accent); font-size: .8rem; text-decoration: none; }
+  #logoutBtn { background: none; border: 1px solid var(--border); color: var(--muted); padding: .4rem .8rem; border-radius: 6px; cursor: pointer; font-size: .8rem; }
+  #reports {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1.5rem;
+    align-items: start;
+  }
+  @media (max-width: 1060px) {
+    #reports {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .report { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; margin-bottom: 0; }
+  .report-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; flex-wrap: wrap; gap: .5rem; }
+  .report-head h2 { margin: 0; font-size: 1.1rem; display: flex; align-items: center; gap: .5rem; }
+  .status-pill { font-size: .72rem; padding: .2rem .55rem; border-radius: 999px; font-weight: 600; }
+  .status-success { background: rgba(52,211,153,.15); color: var(--green); }
+  .status-error { background: rgba(248,113,113,.15); color: var(--red); }
+  .status-running { background: rgba(59,130,246,.15); color: var(--accent); }
+  .status-unknown { background: rgba(148,163,184,.15); color: var(--muted); }
+
+  .controls { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  button.refresh {
+    background: var(--accent); border: none; color: white; padding: .5rem 1rem; border-radius: 8px;
+    cursor: pointer; font-weight: 600; font-size: .85rem;
+  }
+  button.refresh:disabled { background: #475569; cursor: default; }
+  button.refresh:hover:not(:disabled) { background: var(--accent-dim); }
+  .manual-gme { display: flex; gap: .35rem; align-items: center; }
+  .manual-gme input { width: 110px; padding: .35rem .5rem; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: .8rem; }
+  .manual-gme button { padding: .35rem .6rem; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-size: .75rem; cursor: pointer; }
+
+  .corridor { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .corridor:first-of-type { margin-top: .75rem; }
+  .corridor-title { font-size: .85rem; font-weight: 600; color: var(--muted); margin-bottom: .6rem; text-transform: uppercase; letter-spacing: .03em; }
+
+  .krw-calc { display: flex; align-items: baseline; gap: .4rem; font-size: .8rem; color: var(--muted); margin-bottom: .6rem; flex-wrap: wrap; }
+  .krw-calc input {
+    width: 130px; padding: .3rem .5rem; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: .85rem; font-variant-numeric: tabular-nums;
+  }
+  .krw-results { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: .3rem .9rem; font-size: .8rem; color: var(--muted); margin-bottom: .6rem; }
+  .krw-results b { color: var(--text); }
+  .krw-note { font-size: .68rem; color: var(--muted); opacity: .7; margin-bottom: .5rem; }
+
+  .gme-token-card { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+  .gme-token-title { font-size: .85rem; font-weight: 600; margin-bottom: .4rem; display: flex; align-items: center; gap: .4rem; }
+  .owner-badge { font-size: .62rem; text-transform: uppercase; letter-spacing: .04em; background: rgba(251,191,36,.15); color: var(--gme); padding: .1rem .4rem; border-radius: 4px; font-weight: 700; }
+  .gme-token-status { font-size: .74rem; color: var(--muted); margin-bottom: .5rem; }
+  .gme-token-status.expired { color: var(--red); }
+  .gme-token-label { display: block; font-size: .7rem; color: var(--muted); margin: .5rem 0 .25rem; }
+  .gme-token-card textarea, .gme-token-card input[type="text"] {
+    width: 100%; padding: .5rem; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: .78rem; font-family: ui-monospace, monospace;
+  }
+  .gme-token-card textarea { min-height: 60px; resize: vertical; }
+  .gme-token-actions { display: flex; align-items: center; gap: .6rem; margin-top: .5rem; }
+  .gme-token-actions button { padding: .4rem .8rem; border-radius: 6px; border: none; background: var(--accent); color: white; font-size: .78rem; font-weight: 600; cursor: pointer; }
+  .gme-token-actions button:hover { background: var(--accent-dim); }
+  #gmeTokenResult { font-size: .76rem; }
+  #gmeTokenResult.ok { color: var(--green); }
+  #gmeTokenResult.warn { color: var(--stale); }
+  #gmeTokenResult.error { color: var(--red); }
+
+  .bars { display: flex; flex-direction: column; gap: .3rem; }
+  .bar-row { display: grid; grid-template-columns: 130px 1fr 90px; align-items: center; gap: .5rem; font-size: .78rem; }
+  .bar-row .name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-row .name.gme { color: var(--gme); font-weight: 700; }
+  .bar-track { position: relative; height: 18px; background: var(--panel-2); border-radius: 4px; overflow: hidden; }
+  .bar-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border); }
+  .bar-fill { position: absolute; top: 1px; bottom: 1px; border-radius: 3px; }
+  .bar-fill.pos { background: var(--green); left: 50%; }
+  .bar-fill.neg { background: var(--red); right: 50%; }
+  .bar-fill.gme-marker { background: var(--gme); left: calc(50% - 1.5px); width: 3px; }
+  .bar-row .total { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar-row.stale .name { color: var(--stale); }
+  .bar-row.stale .total::after { content: " ⚠"; }
+
+  .window-tabs { display: flex; align-items: center; gap: .3rem; margin-bottom: .6rem; flex-wrap: wrap; }
+  .window-tabs button, .corridor-tabs button { padding: .25rem .6rem; font-size: .72rem; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); cursor: pointer; }
+  .window-tabs button.active, .corridor-tabs button.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .window-tabs .sort-spacer { flex: 1; }
+  .corridor-tabs { display: flex; gap: .3rem; margin-bottom: .75rem; flex-wrap: wrap; }
+
+  .empty { color: var(--muted); font-size: .8rem; font-style: italic; padding: .5rem 0; }
+  .history-body { margin-top: .75rem; }
+
+  .excel-table { margin-top: 1rem; }
+  .excel-table img { max-width: 100%; border-radius: 6px; border: 1px solid var(--border); background: white; }
+  .excel-table-label { font-size: .72rem; color: var(--muted); margin-bottom: .35rem; }
+
+  .trend-wrap { position: relative; user-select: none; }
+  .trend-wrap svg { width: 100%; height: auto; display: block; touch-action: none; }
+  .trend-legend { display: flex; flex-wrap: wrap; gap: .5rem .9rem; margin-top: .5rem; font-size: .74rem; }
+  .trend-legend .item { display: flex; align-items: center; gap: .35rem; cursor: pointer; color: var(--muted); }
+  .trend-legend .item.hidden { opacity: .35; text-decoration: line-through; }
+  .trend-legend .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .trend-hint { font-size: .68rem; color: var(--muted); opacity: .6; margin-top: .3rem; }
+  .trend-tooltip {
+    position: absolute; pointer-events: none; background: #0b1220; border: 1px solid var(--border);
+    border-radius: 6px; padding: .4rem .55rem; font-size: .7rem; line-height: 1.5; white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4); display: none; z-index: 5;
+  }
+  .trend-tooltip .row { display: flex; align-items: center; gap: .35rem; }
+  .trend-tooltip .sw { width: 8px; height: 8px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>GME Rate Dashboard</h1>
+  </div>
+  <div style="display:flex; align-items:center; gap:1rem;">
+    <a href="https://app-guide-217749099623.asia-southeast1.run.app/admin" target="_blank">App Guide Admin &rarr;</a>
+    <button id="logoutBtn">Log out</button>
+  </div>
+</header>
+
+<div id="reports"></div>
+
+<script>
+const REPORTS = [
+  { key: "thailand", label: "Thailand", manualGme: true },
+  { key: "laos", label: "Laos", manualGme: false },
+];
+const activeWindow = {};
+const activeCorridor = {};
+const rankingSortOrder = {}; // "reportKey:corridor" -> "cheap" | "expensive"
+const krwInputValue = {};       // reportKey -> current calculator amount
+const lastOverviewData = {};    // reportKey -> last /api/overview[reportKey], for calculator re-scaling
+const lastHistoryData = {};     // reportKey -> last /api/history/<reportKey>
+const chartState = {};          // `${reportKey}:${corridor}` -> {start, end, hidden:Set}
+let currentRole = "none";
+let gmeTokenStatus = null;      // {lastUpdatedAt, expiresAt} - owner only
+
+// Real per-competitor brand colors (sampled from each site's own
+// theme-color / logo, not a generic palette) - matches the laptop
+// dashboard's PROVIDER_STYLE table. GME gets its own red + bold treatment
+// regardless of exact product-name suffix (e.g. "GME (RIA-Other banks)").
+const PROVIDER_STYLE = {
+  "Coinshot": "#00CC4C", "Cross": "#3B82F6", "E9Pay": "#FFD21D",
+  "GmoneyTrans": "#1060A0", "Hanpass": "#4884F6", "JRF": "#BE001C",
+  "WireBarley": "#017A49", "KEB Hana": "#7C3AED", "SBI": "#EA580C",
+};
+const GME_COLOR = "#dc2626";
+const FALLBACK_COLORS = ["#8b5cf6", "#f97316", "#14b8a6", "#eab308", "#ec4899", "#06b6d4", "#84cc16", "#f43f5e"];
+const fallbackIndex = {};
+
+function providerColor(provider) {
+  if (provider.startsWith("GME")) return GME_COLOR;
+  if (PROVIDER_STYLE[provider]) return PROVIDER_STYLE[provider];
+  if (!(provider in fallbackIndex)) fallbackIndex[provider] = Object.keys(fallbackIndex).length;
+  return FALLBACK_COLORS[fallbackIndex[provider] % FALLBACK_COLORS.length];
+}
+
+function fmtNum(n, decimals) {
+  if (n === null || n === undefined) return "—";
+  if (decimals) return n.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+  return Math.round(n).toLocaleString();
+}
+
+function statusPill(status) {
+  const state = (status && status.state) || "unknown";
+  const label = { success: "OK", error: "error", running: "running…", unknown: "no data yet" }[state] || state;
+  return `<span class="status-pill status-${state}">${label}</span>`;
+}
+
+function renderBars(providers, valueKey, maxAbs, staleSet) {
+  if (!providers.length) return '<div class="empty">No data yet — click Refresh.</div>';
+  return '<div class="bars">' + providers.map(p => {
+    const val = p[valueKey];
+    const isGme = p.isGme;
+    const isBaseline = isGme && (val === 0 || val === null || val === undefined);
+    const stale = staleSet && staleSet.has(p.provider);
+    let fillHtml = "";
+    if (isBaseline) {
+      fillHtml = '<div class="bar-fill gme-marker"></div>';
+    } else if (val !== null && val !== undefined && maxAbs > 0) {
+      const pct = Math.min(100, Math.abs(val) / maxAbs * 50);
+      fillHtml = `<div class="bar-fill ${val >= 0 ? "pos" : "neg"}" style="width:${pct}%"></div>`;
+    }
+    const gapLabel = (val !== null && val !== undefined) ? `${val >= 0 ? "+" : ""}${fmtNum(val)}` : "—";
+    return `<div class="bar-row${stale ? " stale" : ""}">
+      <div class="name${isGme ? " gme" : ""}">${p.provider}</div>
+      <div class="bar-track"><div class="bar-center"></div>${fillHtml}</div>
+      <div class="total">${gapLabel}</div>
+    </div>`;
+  }).join("") + '</div>';
+}
+
+// ---------------------------------------------------------------------
+// Live "[___] KRW gets you..." calculator - editable per report, scales
+// the cached amount(1,000,000) figure client-side with no re-fetch.
+// ---------------------------------------------------------------------
+
+function renderKrwCalc(reportKey, corridors) {
+  const amount = krwInputValue[reportKey] || 1_000_000;
+  const rows = [];
+  for (const [corridor, block] of corridors) {
+    for (const rc of (block.reverseConversions || [])) {
+      const scaled = amount * rc.amount / 1_000_000;
+      rows.push(`<span><b>${scaled.toLocaleString(undefined, {maximumFractionDigits: rc.currency === "LAK" ? 0 : 2})} ${rc.currency}</b> via ${rc.provider}</span>`);
+    }
+  }
+  if (!rows.length) return "";
+  return `<div class="krw-block">
+    <div class="krw-calc">
+      <input type="text" inputmode="numeric" id="krwInput-${reportKey}" value="${amount.toLocaleString()}"
+        oninput="onKrwInput('${reportKey}', this)">
+      <span>KRW gets you:</span>
+    </div>
+    <div class="krw-results">${rows.join("")}</div>
+    <div class="krw-note">GME's true exchange rate (fee backed out) — in the app, 1,000,000 KRW quotes like 1,005,000 KRW at this rate.</div>
+  </div>`;
+}
+
+function onKrwInput(reportKey, inputEl) {
+  const cursorFromEnd = inputEl.value.length - inputEl.selectionStart;
+  const digits = inputEl.value.replace(/[^\d]/g, "");
+  const n = digits ? parseInt(digits, 10) : 0;
+  krwInputValue[reportKey] = n;
+  const formatted = n.toLocaleString();
+  inputEl.value = formatted;
+  const pos = Math.max(0, formatted.length - cursorFromEnd);
+  inputEl.setSelectionRange(pos, pos);
+  updateKrwCalculator(reportKey);
+}
+
+function updateKrwCalculator(reportKey) {
+  const data = lastOverviewData[reportKey];
+  if (!data) return;
+  const corridors = Object.entries(data.rates || {});
+  const amount = krwInputValue[reportKey] || 1_000_000;
+  const resultsRows = [];
+  for (const [corridor, block] of corridors) {
+    for (const rc of (block.reverseConversions || [])) {
+      const scaled = amount * rc.amount / 1_000_000;
+      resultsRows.push(`<span><b>${scaled.toLocaleString(undefined, {maximumFractionDigits: rc.currency === "LAK" ? 0 : 2})} ${rc.currency}</b> via ${rc.provider}</span>`);
+    }
+  }
+  const inputEl = document.querySelector(`#krwInput-${reportKey}`);
+  const el = inputEl ? inputEl.closest(".krw-block").querySelector(".krw-results") : null;
+  if (el) el.innerHTML = resultsRows.join("");
+}
+
+// ---------------------------------------------------------------------
+// GME Laos mobile-API token - owner-only. No automatable refresh exists
+// (the account password would be needed), so a human pastes a fresh one
+// here roughly daily; the pipeline degrades gracefully if it lapses.
+// ---------------------------------------------------------------------
+
+async function initAuth() {
+  const res = await fetch("/api/whoami");
+  currentRole = (await res.json()).role;
+  if (currentRole === "owner") await refreshGmeTokenStatus();
+}
+
+async function refreshGmeTokenStatus() {
+  const res = await fetch("/api/gme-token-status");
+  gmeTokenStatus = res.ok ? await res.json() : null;
+}
+
+// Survives loadOverview()'s full DOM rebuild (which fires right after a
+// successful update to refresh the "Last updated" line) - without this the
+// success/failure message got wiped before it was readable, since that
+// rebuild happens near-instantly after a local-only status refresh.
+let lastGmeTokenResult = null; // {text, cls}
+
+function renderGmeTokenCard() {
+  if (currentRole !== "owner") return "";
+  const s = gmeTokenStatus || {};
+  const fmtDate = (iso) => iso ? new Date(iso).toLocaleString() : "never";
+  let expiryNote = "", expired = false;
+  if (s.expiresAt) {
+    const hoursLeft = (new Date(s.expiresAt) - new Date()) / 3600000;
+    expired = hoursLeft <= 0;
+    expiryNote = expired ? ` (EXPIRED ${Math.round(-hoursLeft)}h ago)` : ` (expires in ~${Math.round(hoursLeft)}h)`;
+  }
+  const resultHtml = lastGmeTokenResult
+    ? `<span id="gmeTokenResult" class="${lastGmeTokenResult.cls}">${lastGmeTokenResult.text}</span>`
+    : `<span id="gmeTokenResult"></span>`;
+  return `<div class="gme-token-card">
+    <div class="gme-token-title">GME Mobile Token <span class="owner-badge">owner</span></div>
+    <div class="gme-token-status${expired ? " expired" : ""}">
+      Last updated: ${fmtDate(s.lastUpdatedAt)}${s.expiresAt ? " · Expires: " + fmtDate(s.expiresAt) + expiryNote : ""}
+      ${gmeTokenStatus && !s.hasCookie ? '<br><b style="color:var(--red)">Cookie/username not seeded yet on this instance - one-time setup needed before this form will work.</b>' : ""}
+    </div>
+    <textarea id="gmeTokenAuth" placeholder="Paste the full Authorization header, e.g. Bearer eyJ..."></textarea>
+    <div class="gme-token-actions">
+      <button onclick="updateGmeToken()">Update token</button>
+      ${resultHtml}
+    </div>
+  </div>`;
+}
+
+async function updateGmeToken() {
+  const token = document.getElementById("gmeTokenAuth").value.trim();
+  lastGmeTokenResult = { text: "Verifying…", cls: "" };
+  const resultEl = document.getElementById("gmeTokenResult");
+  resultEl.className = "";
+  resultEl.textContent = "Verifying…";
+  try {
+    const res = await fetch("/api/gme-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ authorization: token }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      lastGmeTokenResult = { text: "Error: " + (data.error || "failed"), cls: "error" };
+    } else if (data.test && data.test.ok) {
+      lastGmeTokenResult = { text: `Saved and verified live (KRW=${data.test.krw.toLocaleString()})`, cls: "ok" };
+    } else {
+      lastGmeTokenResult = { text: `Saved, but the live check failed: ${data.test ? data.test.message : "unknown error"}`, cls: "warn" };
+    }
+  } catch (e) {
+    lastGmeTokenResult = { text: "Network error", cls: "error" };
+  }
+  await refreshGmeTokenStatus();
+  await loadOverview();
+}
+
+// ---------------------------------------------------------------------
+// Current-rates view (per corridor, diverging bars vs GME)
+// ---------------------------------------------------------------------
+
+async function loadOverview() {
+  const res = await fetch("/api/overview");
+  const data = await res.json();
+  const root = document.getElementById("reports");
+  root.innerHTML = "";
+
+  for (const cfg of REPORTS) {
+    const r = data[cfg.key] || { status: {}, rates: {} };
+    lastOverviewData[cfg.key] = r;
+    const corridors = Object.entries(r.rates || {});
+    const el = document.createElement("div");
+    el.className = "report";
+
+    let manualGmeHtml = "";
+    if (cfg.manualGme) {
+      manualGmeHtml = `<div class="manual-gme">
+        <input type="number" placeholder="GME KRW (if site down)" id="manual-${cfg.key}">
+        <button onclick="refreshReport('${cfg.key}', true)">Use this rate</button>
+      </div>`;
+    }
+
+    let corridorsHtml = "";
+    if (!corridors.length) {
+      corridorsHtml = '<div class="empty">No data yet — click Refresh to fetch live rates.</div>';
+    } else {
+      corridorsHtml = renderKrwCalc(cfg.key, corridors);
+    }
+
+    const pngHtml = r.hasPng
+      ? `<div class="excel-table">
+          <div class="excel-table-label">Excel-format ranking table</div>
+          <img src="/image/${cfg.key}?t=${r.pngUpdatedAt}" alt="${cfg.label} ranking table">
+        </div>`
+      : "";
+    const gmeTokenHtml = cfg.key === "laos" ? renderGmeTokenCard() : "";
+
+    el.innerHTML = `
+      <div class="report-head">
+        <h2>${cfg.label}${statusPill(r.status)}</h2>
+        <div class="controls">
+          ${manualGmeHtml}
+          <button class="refresh" id="refresh-${cfg.key}" onclick="refreshReport('${cfg.key}')">Refresh</button>
+        </div>
+      </div>
+      ${pngHtml}
+      ${corridorsHtml}
+      <div class="corridor-title" style="margin-top:.75rem">Trend / ranking</div>
+      <div class="history-body" id="history-${cfg.key}"></div>
+      ${gmeTokenHtml}
+    `;
+    root.appendChild(el);
+
+    if (corridors.length) loadHistory(cfg.key);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Trend chart + multi-window ranking (per corridor - Laos gets a
+// corridor selector since it has 5, Thailand only ever has 1). Always
+// shown - was click-to-expand, but the redundant top bar charts got
+// removed (duplicated the PNG table) so this is now the only place to
+// see anything beyond the raw table, worth showing by default.
+// ---------------------------------------------------------------------
+
+async function loadHistory(reportKey) {
+  const res = await fetch(`/api/history/${reportKey}`);
+  const data = await res.json();
+  lastHistoryData[reportKey] = data;
+  const el = document.getElementById(`history-${reportKey}`);
+  const corridors = Object.keys(data);
+  if (!corridors.length) {
+    el.innerHTML = '<div class="empty">Not enough history yet.</div>';
+    return;
+  }
+
+  if (!activeCorridor[reportKey] || !corridors.includes(activeCorridor[reportKey])) {
+    activeCorridor[reportKey] = corridors[0];
+  }
+  const corridor = activeCorridor[reportKey];
+
+  let corridorTabsHtml = "";
+  if (corridors.length > 1) {
+    corridorTabsHtml = '<div class="corridor-tabs">' + corridors.map(c =>
+      `<button class="${c === corridor ? "active" : ""}" onclick="selectCorridor('${reportKey}', '${c}')">${c}</button>`
+    ).join("") + '</div>';
+  }
+
+  el.innerHTML = `${corridorTabsHtml}<div id="trend-container-${reportKey}"></div>`;
+  renderCorridorHistory(reportKey, corridor);
+}
+
+function selectCorridor(reportKey, corridor) {
+  activeCorridor[reportKey] = corridor;
+  loadHistory(reportKey); // cached data, just a re-render - no re-fetch
+}
+
+function renderCorridorHistory(reportKey, corridor) {
+  const data = lastHistoryData[reportKey];
+  const block = data[corridor];
+  const container = document.getElementById(`trend-container-${reportKey}`);
+  if (!block || !container) return;
+
+  const key = `${reportKey}:${corridor}`;
+  const win = activeWindow[key] || "7";
+  activeWindow[key] = win;
+  const windows = block.windows || {};
+  const ranking = (windows[win] && windows[win].ranking) || [];
+  const maxAbs = Math.max(1, ...ranking.map(p => Math.abs(p.gapVsGmeKrw || 0)));
+  const sortOrder = rankingSortOrder[key] || "expensive";
+  const rankRows = ranking
+    .map(p => ({ ...p, gap: p.gapVsGmeKrw, total: p.avgTotal }))
+    .sort((a, b) => sortOrder === "cheap" ? a.total - b.total : b.total - a.total);
+  const tabs = Object.keys(windows).sort((a, b) => +a - +b).map(n =>
+    `<button class="${n === win ? "active" : ""}" onclick="setWindow('${reportKey}', '${corridor}', '${n}')">${n}d</button>`
+  ).join("");
+  const sortToggle = `
+    <span class="sort-spacer"></span>
+    <button class="${sortOrder === "cheap" ? "active" : ""}" onclick="setRankingSort('${reportKey}', '${corridor}', 'cheap')">Cheapest first</button>
+    <button class="${sortOrder === "expensive" ? "active" : ""}" onclick="setRankingSort('${reportKey}', '${corridor}', 'expensive')">Most expensive first</button>`;
+
+  const chartDomSafe = corridor.replace(/\s+/g, "_");
+  container.innerHTML = `
+    <div id="trend-chart-${reportKey}-${chartDomSafe}"></div>
+    <div class="corridor" style="margin-top:.5rem">
+      <div class="corridor-title">Average price ranking</div>
+      <div class="window-tabs">${tabs}${sortToggle}</div>
+      ${renderBars(rankRows, "gap", maxAbs, null)}
+    </div>
+  `;
+  renderTrendChart(reportKey, corridor, block.series);
+}
+
+function setWindow(reportKey, corridor, win) {
+  activeWindow[`${reportKey}:${corridor}`] = win;
+  renderCorridorHistory(reportKey, corridor);
+}
+
+function setRankingSort(reportKey, corridor, order) {
+  rankingSortOrder[`${reportKey}:${corridor}`] = order;
+  renderCorridorHistory(reportKey, corridor);
+}
+
+// ---- SVG line chart: zoomable, hoverable, toggle-to-isolate legend ----
+
+const CHART_W = 720, CHART_H = 260, PAD = { top: 16, right: 12, bottom: 26, left: 56 };
+const MIN_ZOOM_MS = 12 * 3600 * 1000; // floor: 12h window
+const seriesCache = {}; // domId -> series object, so legend onclick doesn't need huge inline JSON
+
+function renderTrendChart(reportKey, corridor, series) {
+  const domId = `trend-chart-${reportKey}-${corridor.replace(/\s+/g, "_")}`;
+  const mount = document.getElementById(domId);
+  if (!mount) return;
+  seriesCache[domId] = series;
+
+  const providers = Object.entries(series);
+  if (!providers.length) { mount.innerHTML = '<div class="empty">Not enough history yet.</div>'; return; }
+
+  const allPoints = providers.flatMap(([, s]) => s.points.map(p => new Date(p.t).getTime()));
+  const fullMin = Math.min(...allPoints), fullMax = Math.max(...allPoints);
+  const stateKey = `${reportKey}:${corridor}`;
+  if (!chartState[stateKey]) chartState[stateKey] = { start: fullMin, end: Math.max(fullMax, fullMin + MIN_ZOOM_MS), hidden: new Set() };
+  const st = chartState[stateKey];
+
+  mount.innerHTML = `<div class="trend-wrap" id="wrap-${domId}">
+    <svg viewBox="0 0 ${CHART_W} ${CHART_H}" id="svg-${domId}"></svg>
+    <div class="trend-tooltip" id="tip-${domId}"></div>
+  </div>
+  <div class="trend-hint">Scroll to zoom · click a name to hide/show its line</div>
+  <div class="trend-legend" id="legend-${domId}"></div>`;
+
+  drawTrendChart(reportKey, corridor, domId, fullMin, fullMax);
+
+  const wrap = document.getElementById(`wrap-${domId}`);
+  wrap.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const svg = document.getElementById(`svg-${domId}`);
+    const rect = svg.getBoundingClientRect();
+    const plotFrac = Math.min(1, Math.max(0, ((e.clientX - rect.left) * (CHART_W / rect.width) - PAD.left) / (CHART_W - PAD.left - PAD.right)));
+    const cursorT = st.start + plotFrac * (st.end - st.start);
+    const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+    let span = (st.end - st.start) * factor;
+    span = Math.max(MIN_ZOOM_MS, Math.min(fullMax - fullMin || MIN_ZOOM_MS, span));
+    let newStart = cursorT - plotFrac * span;
+    let newEnd = newStart + span;
+    if (newStart < fullMin) { newStart = fullMin; newEnd = newStart + span; }
+    if (newEnd > fullMax) { newEnd = fullMax; newStart = newEnd - span; }
+    st.start = newStart; st.end = newEnd;
+    drawTrendChart(reportKey, corridor, domId, fullMin, fullMax);
+  }, { passive: false });
+}
+
+function toggleSeries(domId, reportKey, corridor, provider) {
+  const stateKey = `${reportKey}:${corridor}`;
+  const st = chartState[stateKey];
+  if (st.hidden.has(provider)) st.hidden.delete(provider); else st.hidden.add(provider);
+  const series = seriesCache[domId];
+  const allPoints = Object.values(series).flatMap(s => s.points.map(p => new Date(p.t).getTime()));
+  drawTrendChart(reportKey, corridor, domId, Math.min(...allPoints), Math.max(...allPoints));
+}
+
+function drawTrendChart(reportKey, corridor, domId, fullMin, fullMax) {
+  const series = seriesCache[domId];
+  const stateKey = `${reportKey}:${corridor}`;
+  const st = chartState[stateKey];
+  const svg = document.getElementById(`svg-${domId}`);
+  const legendEl = document.getElementById(`legend-${domId}`);
+  if (!svg) return;
+
+  const plotW = CHART_W - PAD.left - PAD.right;
+  const plotH = CHART_H - PAD.top - PAD.bottom;
+  const x = (t) => PAD.left + (t - st.start) / (st.end - st.start) * plotW;
+
+  const visible = Object.entries(series).filter(([p]) => !st.hidden.has(p));
+  const visiblePts = visible.flatMap(([, s]) => s.points.filter(p => {
+    const t = new Date(p.t).getTime();
+    return p.gap !== null && p.gap !== undefined && t >= st.start && t <= st.end;
+  }));
+  let yMin = Math.min(...visiblePts.map(p => p.gap));
+  let yMax = Math.max(...visiblePts.map(p => p.gap));
+  if (!isFinite(yMin) || !isFinite(yMax)) { yMin = 0; yMax = 1; }
+  if (yMin === yMax) { yMin -= 1; yMax += 1; }
+  const yPad = (yMax - yMin) * 0.08;
+  yMin -= yPad; yMax += yPad;
+  const y = (v) => PAD.top + plotH - (v - yMin) / (yMax - yMin) * plotH;
+
+  let svgParts = [];
+  const gridN = 4;
+  for (let i = 0; i <= gridN; i++) {
+    const v = yMin + (yMax - yMin) * i / gridN;
+    const yy = y(v);
+    svgParts.push(`<line x1="${PAD.left}" y1="${yy}" x2="${CHART_W - PAD.right}" y2="${yy}" stroke="#334155" stroke-width="1" />`);
+    svgParts.push(`<text x="${PAD.left - 6}" y="${yy + 3}" text-anchor="end" font-size="9" fill="#94a3b8">${v >= 0 ? "+" : ""}${Math.round(v).toLocaleString()}</text>`);
+  }
+  const fmtT = (ms) => { const d = new Date(ms); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+  svgParts.push(`<text x="${PAD.left}" y="${CHART_H - 6}" font-size="9" fill="#94a3b8">${fmtT(st.start)}</text>`);
+  svgParts.push(`<text x="${CHART_W - PAD.right}" y="${CHART_H - 6}" text-anchor="end" font-size="9" fill="#94a3b8">${fmtT(st.end)}</text>`);
+
+  const labelPositions = [];
+  for (const [provider, s] of visible) {
+    const pts = s.points
+      .filter(p => p.gap !== null && p.gap !== undefined)
+      .map(p => ({ t: new Date(p.t).getTime(), v: p.gap }))
+      .filter(p => p.t >= st.start && p.t <= st.end)
+      .sort((a, b) => a.t - b.t);
+    if (!pts.length) continue;
+    const color = providerColor(provider);
+    const isGme = provider.startsWith("GME");
+    const d = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${x(p.t).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
+    svgParts.push(`<path d="${d}" fill="none" stroke="${color}" stroke-width="${isGme ? 2.75 : 1.5}" opacity="${isGme ? 1 : 0.85}" />`);
+    const last = pts[pts.length - 1];
+    labelPositions.push({ provider, color, isGme, lastX: x(last.t), trueY: y(last.v), labelY: y(last.v) });
+  }
+
+  // greedy vertical de-collision for end-labels: sort by y, push apart to a
+  // minimum gap (forward pass), then pull the whole stack back inside the
+  // plot bounds if that pushed the last label past the bottom (backward pass).
+  const MIN_GAP = 13;
+  labelPositions.sort((a, b) => a.labelY - b.labelY);
+  for (let i = 1; i < labelPositions.length; i++) {
+    if (labelPositions[i].labelY < labelPositions[i - 1].labelY + MIN_GAP) {
+      labelPositions[i].labelY = labelPositions[i - 1].labelY + MIN_GAP;
+    }
+  }
+  const overflow = labelPositions.length ? labelPositions[labelPositions.length - 1].labelY - (CHART_H - PAD.bottom - 4) : 0;
+  if (overflow > 0) for (const lp of labelPositions) lp.labelY -= overflow;
+
+  for (const lp of labelPositions) {
+    if (Math.abs(lp.trueY - lp.labelY) > 2) {
+      svgParts.push(`<line x1="${lp.lastX}" y1="${lp.trueY}" x2="${CHART_W - PAD.right + 3}" y2="${lp.labelY}" stroke="${lp.color}" stroke-width="1" opacity="0.5" stroke-dasharray="2,2" />`);
+    }
+    svgParts.push(`<text x="${CHART_W - PAD.right + 4}" y="${lp.labelY + 3}" font-size="${lp.isGme ? 10 : 9}" font-weight="${lp.isGme ? 700 : 400}" fill="${lp.color}">${lp.provider}</text>`);
+  }
+
+  svgParts.push(`<rect id="hover-${domId}" x="${PAD.left}" y="${PAD.top}" width="${plotW}" height="${plotH}" fill="transparent" style="cursor:crosshair" />`);
+  svgParts.push(`<line id="crosshair-${domId}" x1="0" y1="${PAD.top}" x2="0" y2="${CHART_H - PAD.bottom}" stroke="#64748b" stroke-width="1" style="display:none" />`);
+
+  svg.innerHTML = svgParts.join("");
+  svg.setAttribute("viewBox", `0 0 ${CHART_W + 90} ${CHART_H}`);
+
+  const hoverRect = document.getElementById(`hover-${domId}`);
+  const crosshair = document.getElementById(`crosshair-${domId}`);
+  const tip = document.getElementById(`tip-${domId}`);
+  hoverRect.addEventListener("mousemove", (e) => {
+    const rect = svg.getBoundingClientRect();
+    const scale = (CHART_W + 90) / rect.width;
+    const sx = (e.clientX - rect.left) * scale;
+    const t = st.start + (sx - PAD.left) / plotW * (st.end - st.start);
+    crosshair.setAttribute("x1", sx); crosshair.setAttribute("x2", sx);
+    crosshair.style.display = "block";
+
+    const rows = visible.map(([provider, s]) => {
+      const pts = s.points
+        .filter(p => p.gap !== null && p.gap !== undefined)
+        .map(p => ({ t: new Date(p.t).getTime(), v: p.gap }))
+        .filter(p => p.t >= st.start && p.t <= st.end);
+      if (!pts.length) return null;
+      const nearest = pts.reduce((a, b) => Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a);
+      return { provider, v: nearest.v, color: providerColor(provider) };
+    }).filter(Boolean).sort((a, b) => b.v - a.v);
+
+    tip.innerHTML = rows.map(r => `<div class="row"><span class="sw" style="background:${r.color}"></span>${r.provider}: <b>${r.v >= 0 ? "+" : ""}${Math.round(r.v).toLocaleString()}</b></div>`).join("");
+    tip.style.display = rows.length ? "block" : "none";
+    tip.style.left = Math.min(rect.width - 160, Math.max(0, (e.clientX - rect.left) + 12)) + "px";
+    tip.style.top = Math.max(0, (e.clientY - rect.top) - 10) + "px";
+  });
+  hoverRect.addEventListener("mouseleave", () => { crosshair.style.display = "none"; tip.style.display = "none"; });
+
+  legendEl.innerHTML = Object.keys(series).map(provider => {
+    const hidden = st.hidden.has(provider);
+    return `<div class="item${hidden ? " hidden" : ""}" onclick="toggleSeries('${domId}', '${reportKey}', '${corridor}', '${provider}')">
+      <span class="swatch" style="background:${providerColor(provider)}"></span>${provider}
+    </div>`;
+  }).join("");
+}
+
+// ---------------------------------------------------------------------
+// Refresh / job polling
+// ---------------------------------------------------------------------
+
+async function refreshReport(reportKey, manual) {
+  const btn = document.getElementById(`refresh-${reportKey}`);
+  btn.disabled = true;
+  btn.textContent = "Fetching…";
+
+  const body = { report: reportKey };
+  if (manual) {
+    const val = document.getElementById(`manual-${reportKey}`).value;
+    if (val) body.gmeManualKrw = val;
+  }
+
+  try {
+    const res = await fetch("/api/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || "Failed to start refresh"); btn.disabled = false; btn.textContent = "Refresh"; return; }
+    pollJob(data.jobId, reportKey);
+  } catch (e) {
+    alert("Network error starting refresh");
+    btn.disabled = false;
+    btn.textContent = "Refresh";
+  }
+}
+
+async function pollJob(jobId, reportKey) {
+  const btn = document.getElementById(`refresh-${reportKey}`);
+  const poll = async () => {
+    const res = await fetch(`/api/job/${jobId}`);
+    const status = await res.json();
+    if (status.state === "success" || status.state === "error") {
+      btn.disabled = false;
+      btn.textContent = "Refresh";
+      await loadOverview();
+      if (status.state === "error") alert(`${reportKey} refresh failed: ${status.error || "unknown error"}`);
+      return;
+    }
+    setTimeout(poll, 2000);
+  };
+  setTimeout(poll, 2000);
+}
+
+document.getElementById("logoutBtn").addEventListener("click", async () => {
+  await fetch("/logout", { method: "POST" });
+  window.location.href = "/login";
+});
+
+(async () => {
+  await initAuth();
+  await loadOverview();
+})();
+</script>
+</body>
+</html>

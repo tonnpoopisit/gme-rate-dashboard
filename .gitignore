@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.venv/
+
+# Secrets - never committed (this repo is public). Local dev only; Cloud Run
+# mounts the real versions from Secret Manager (see build.sh).
+dashboard_auth.json
+dashboard_secret_key.txt
+gme_mobile_secrets.json
+webhook_config.json
+webhook_config_laos.json
+
+# Generated at runtime, not source - regenerated fresh by every pipeline run.
+price_history.db
+status_*.json
+dashboard.log
+Thailand_left_table.png
+Laos_left_table.png
+table_data_*.json
+table_data_*.html
+_teams_render_*.png

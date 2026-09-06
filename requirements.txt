@@ -1,0 +1,9 @@
+flask
+gunicorn
+requests
+openpyxl
+playwright==1.47.0
+pillow
+google-cloud-storage
+google-cloud-secret-manager
+tzdata

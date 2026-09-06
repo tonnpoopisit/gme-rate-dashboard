@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+dashboard_auth.json
+dashboard_secret_key.txt
+gme_mobile_secrets.json
+price_history.db
+status_*.json
+.venv/
+.git/
+.gitignore
+.gcloudignore
