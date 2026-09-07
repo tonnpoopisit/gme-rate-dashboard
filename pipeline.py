@@ -108,13 +108,19 @@ def render_png(report: str, stale_pairs: set) -> str:
     png_path = PROJECT_ROOT / PNG_NAMES[report]
     json_path.write_text(json.dumps(table))
 
-    # Plain full-quality render for both reports - no --compact/palette
-    # quantization. That used to be needed because this same PNG was also
-    # embedded as base64 in the Teams webhook body, which hard-rejects
-    # payloads over ~28KB; Teams now fetches the image via a public URL
-    # instead (see teams_post.py), so nothing here is size-constrained
-    # anymore and the table can render at full, legible resolution.
-    args = [sys.executable, str(PROJECT_ROOT / "render_table_png.py"), str(json_path), str(png_path)]
+    # Full-quality render for both reports - no --compact/palette
+    # quantization, which used to be needed only because this same PNG was
+    # also embedded as base64 in the Teams webhook body (a hard ~28KB
+    # limit); Teams now fetches the image via a public URL instead (see
+    # teams_post.py), so nothing here is size-constrained anymore.
+    # font-size/padding bumped above render_table_png.py's own defaults
+    # (14/4/10) since the table still looked small in Teams even at full
+    # resolution/full card width - bigger source text rather than relying
+    # only on display-side scaling.
+    args = [
+        sys.executable, str(PROJECT_ROOT / "render_table_png.py"), str(json_path), str(png_path),
+        "--font-size", "18", "--pad-v", "6", "--pad-h", "14",
+    ]
     subprocess.run(args, check=True, cwd=str(PROJECT_ROOT))
 
     gcs_sync.upload_png(report, png_path)

@@ -69,6 +69,13 @@ def _build_card_body(image_url: str, title: str) -> bytes:
         "type": "AdaptiveCard",
         "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
         "version": "1.4",
+        # Teams renders a card at a narrow ~400px default width regardless of
+        # the image's own resolution - "size": "Stretch" below just fills
+        # that narrow card, not the channel pane, which is almost certainly
+        # why the image looked small without zooming in even after switching
+        # to a full-quality/full-resolution image. This is the documented
+        # Teams-specific opt-in to use the full available message width.
+        "msteams": {"width": "full"},
         "body": [
             {"type": "TextBlock", "text": title, "weight": "Bolder", "size": "Medium"},
             {"type": "Image", "url": image_url, "size": "Stretch"},
