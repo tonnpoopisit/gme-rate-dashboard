@@ -115,20 +115,31 @@ def upload_known_fees(path: Path):
     _client().bucket(GCS_BUCKET).blob("known_fees.json").upload_from_filename(str(path))
 
 
-def upload_public_png(local_path: Path) -> str:
-    """Uploads a copy of local_path to PUBLIC_GCS_BUCKET and returns its
-    stable public URL - used for the Teams card's Image url so Teams' own
-    servers fetch the image directly, rather than embedding it as base64 in
-    the webhook body (which has a hard ~28KB limit the rendered table has
-    already outgrown once - see teams_post.py's git history). Full quality,
-    no compaction needed, since this is no longer size-constrained.
+def upload_public_png(local_path: Path, object_name: str) -> str:
+    """Uploads a copy of local_path to PUBLIC_GCS_BUCKET under object_name
+    and returns its public URL - used for the Teams card's Image url so
+    Teams' own servers fetch the image directly, rather than embedding it as
+    base64 in the webhook body (a hard ~28KB limit the rendered table had
+    already outgrown once - see teams_post.py's git history).
+
+    object_name must be unique per call (caller passes a timestamped name -
+    see teams_post.py) rather than a fixed name like local_path.name:
+    confirmed live that reusing the same URL for every post causes Teams to
+    display a stale, client-cached image instead of re-fetching - a
+    Thailand post showed the *previous day's* rate despite the underlying
+    pipeline having fetched and rendered correctly. A genuinely new URL per
+    post has nothing to serve from cache.
+
     Raises if PUBLIC_GCS_BUCKET isn't configured (local dev has no public
     bucket to publish to)."""
     if not PUBLIC_GCS_BUCKET:
         raise RuntimeError("PUBLIC_GCS_BUCKET not configured - can't publish an image for Teams to fetch")
-    bucket = _client().bucket(PUBLIC_GCS_BUCKET)
-    bucket.blob(local_path.name).upload_from_filename(str(local_path))
-    return f"https://storage.googleapis.com/{PUBLIC_GCS_BUCKET}/{local_path.name}"
+    blob = _client().bucket(PUBLIC_GCS_BUCKET).blob(object_name)
+    # Belt-and-suspenders alongside the unique name - discourages any
+    # intermediate proxy/CDN from caching this object under its own URL too.
+    blob.cache_control = "no-store, max-age=0"
+    blob.upload_from_filename(str(local_path))
+    return f"https://storage.googleapis.com/{PUBLIC_GCS_BUCKET}/{object_name}"
 
 
 def download_png(report: str, local_path: Path) -> bool:

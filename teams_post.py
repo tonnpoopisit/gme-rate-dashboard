@@ -96,8 +96,13 @@ def post_to_teams(report: str, png_path: Path) -> None:
     pipeline treated a failed Send-TeamsImage as a whole-run failure worth
     alerting on."""
     label = REPORT_LABELS[report]
-    title = f"{label} rate report {datetime.now(KST).strftime('%Y-%m-%d %H:%M')}"
-    image_url = gcs_sync.upload_public_png(png_path)
+    now = datetime.now(KST)
+    title = f"{label} rate report {now.strftime('%Y-%m-%d %H:%M')}"
+    # Unique object name per post (not just png_path.name) - see
+    # upload_public_png's docstring for why reusing one fixed URL caused
+    # Teams to display a stale, client-cached image.
+    object_name = f"{report}_{now.strftime('%Y%m%d_%H%M%S')}.png"
+    image_url = gcs_sync.upload_public_png(png_path, object_name)
     body = _build_card_body(image_url, title)
     url = _webhook_url(report)
     resp = requests.post(url, data=body, headers={"Content-Type": "application/json; charset=utf-8"}, timeout=60)
