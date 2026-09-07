@@ -655,7 +655,14 @@ def fetch_wirebarley_browser(thb=BASE_THB, standing_fee=None, headless=True, bro
                     }}
                 }}
             """)
-            page.wait_for_timeout(2000)
+            # 2000ms was too tight - confirmed live: a read here occasionally
+            # grabs the sending input mid-recalculation (React hasn't
+            # finished processing the dispatched input/change events yet),
+            # surfacing as an implausible-value failure ("6,775,068 is
+            # implausibly far from recent history") rather than a clean
+            # timeout, since the read itself always "succeeds" - it just
+            # reads a stale/default value.
+            page.wait_for_timeout(3500)
 
             send_amount_text = page.eval_on_selector_all("input", "els => els.map(e => e.value)")
             if not send_amount_text:

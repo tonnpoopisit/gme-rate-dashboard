@@ -63,7 +63,12 @@ def fetch_kebhana_rates(headless=True, browser=None):
     b = browser or pw.chromium.launch(headless=headless)
     try:
         page = b.new_page()
-        page.goto(RATE_PAGE_URL, wait_until="domcontentloaded", timeout=20000)
+        # 20s was too tight - confirmed live via repeated "Page.goto: Timeout
+        # 20000ms exceeded" failures on Cloud Run (hanabank.com is
+        # occasionally slow to respond, unrelated to network/DNS issues,
+        # which a longer timeout can't fix but which are a separate,
+        # rarer failure mode).
+        page.goto(RATE_PAGE_URL, wait_until="domcontentloaded", timeout=45000)
 
         # The rate table renders into the iframe after its own JS runs (an
         # in-place content swap that can replace the frame document, so a
