@@ -655,18 +655,28 @@ def fetch_wirebarley_browser(thb=BASE_THB, standing_fee=None, headless=True, bro
                     }}
                 }}
             """)
-            # 2000ms was too tight - confirmed live: a read here occasionally
-            # grabs the sending input mid-recalculation (React hasn't
-            # finished processing the dispatched input/change events yet),
-            # surfacing as an implausible-value failure ("6,775,068 is
-            # implausibly far from recent history") rather than a clean
-            # timeout, since the read itself always "succeeds" - it just
-            # reads a stale/default value.
-            page.wait_for_timeout(3500)
-
-            send_amount_text = page.eval_on_selector_all("input", "els => els.map(e => e.value)")
+            # A single fixed wait here has twice now proven too fragile to
+            # WireBarley's own recalculation timing, in two different ways:
+            # 2000ms was too tight and read a stale/default value mid-
+            # recalculation ("6,775,068 is implausibly far from recent
+            # history", fixed by bumping to 3500ms); since ~2026-09-09,
+            # 3500ms started failing a different way - "invalid literal for
+            # int() with base 10: ''", i.e. the field reads as genuinely
+            # EMPTY (WireBarley apparently now blanks it while recalculating
+            # rather than leaving the old value showing), and no single
+            # fixed delay reliably lands after it's repopulated. Polling for
+            # an actual non-empty, digit-bearing value - up to 10s total,
+            # rechecked every 500ms - adapts to however long that takes on
+            # a given run instead of gambling on one delay.
+            send_amount_text = None
+            for _ in range(20):
+                page.wait_for_timeout(500)
+                values = page.eval_on_selector_all("input", "els => els.map(e => e.value)")
+                if values and re.sub(r"[^\d]", "", values[0]):
+                    send_amount_text = values
+                    break
             if not send_amount_text:
-                raise ValueError("WireBarley: could not find amount inputs on page")
+                raise ValueError("WireBarley: amount input still empty/unreadable after 10s of polling")
 
             krw = int(re.sub(r"[^\d]", "", send_amount_text[0]))
 
