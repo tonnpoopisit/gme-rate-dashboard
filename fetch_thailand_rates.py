@@ -642,10 +642,22 @@ def fetch_wirebarley_browser(thb=BASE_THB, standing_fee=None, headless=True, bro
             """)
             page.wait_for_timeout(500)
 
-            # inputs[0] = sending (KRW), inputs[1] = receiving (THB).
+            # inputs[0] = sending (KRW), inputs[1] = receiving (THB) - among
+            # non-checkbox inputs specifically. Confirmed live (2026-09-10)
+            # that WireBarley added a real <input type="checkbox"> elsewhere
+            # on the page (a plain document.querySelectorAll('input') picks
+            # it up as element 0), which had silently shifted these indices
+            # by one: the "receiving" write was landing on the *sending*
+            # KRW field instead, and the later read of "sending" was
+            # actually reading the checkbox's value ('on' - zero digits),
+            # which is the real explanation for the "invalid literal for
+            # int(): ''" failures on every run since ~2026-09-09, not a
+            # timing issue at all (confirmed via a local diagnostic run
+            # against the live page, not guessed) - excluding checkboxes
+            # restores the original, correct indexing.
             page.evaluate(f"""
                 () => {{
-                    const inputs = document.querySelectorAll('input');
+                    const inputs = document.querySelectorAll('input:not([type="checkbox"])');
                     const receivingInput = inputs[1] || inputs[0];
                     if (receivingInput) {{
                         const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
@@ -655,23 +667,15 @@ def fetch_wirebarley_browser(thb=BASE_THB, standing_fee=None, headless=True, bro
                     }}
                 }}
             """)
-            # A single fixed wait here has twice now proven too fragile to
-            # WireBarley's own recalculation timing, in two different ways:
-            # 2000ms was too tight and read a stale/default value mid-
-            # recalculation ("6,775,068 is implausibly far from recent
-            # history", fixed by bumping to 3500ms); since ~2026-09-09,
-            # 3500ms started failing a different way - "invalid literal for
-            # int() with base 10: ''", i.e. the field reads as genuinely
-            # EMPTY (WireBarley apparently now blanks it while recalculating
-            # rather than leaving the old value showing), and no single
-            # fixed delay reliably lands after it's repopulated. Polling for
-            # an actual non-empty, digit-bearing value - up to 10s total,
-            # rechecked every 500ms - adapts to however long that takes on
-            # a given run instead of gambling on one delay.
+            # Kept as a real (if now secondary) safety net: still polls for
+            # a non-empty, digit-bearing value up to 10s rather than trusting
+            # one fixed delay, in case recalculation is genuinely slow on a
+            # given run - but the fix above (correct element, not more
+            # patience) is what actually resolves the current failures.
             send_amount_text = None
             for _ in range(20):
                 page.wait_for_timeout(500)
-                values = page.eval_on_selector_all("input", "els => els.map(e => e.value)")
+                values = page.eval_on_selector_all("input:not([type='checkbox'])", "els => els.map(e => e.value)")
                 if values and re.sub(r"[^\d]", "", values[0]):
                     send_amount_text = values
                     break
