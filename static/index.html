@@ -167,7 +167,12 @@ let gmeTokenStatus = null;      // {lastUpdatedAt, expiresAt} - owner only
 // regardless of exact product-name suffix (e.g. "GME (RIA-Other banks)").
 const PROVIDER_STYLE = {
   "Coinshot": "#00CC4C", "Cross": "#3B82F6", "E9Pay": "#FFD21D",
-  "GmoneyTrans": "#1060A0", "Hanpass": "#4884F6", "JRF": "#BE001C",
+  // GmoneyTrans/Hanpass nudged off their real (near-identical) blues -
+  // with up to 9 providers on one Thailand trend chart, Cross/GmoneyTrans/
+  // Hanpass all being shades of blue made them hard to tell apart at a
+  // glance. Moved to magenta/cyan, clear of every other color here, at the
+  // cost of no longer matching their real site color exactly.
+  "GmoneyTrans": "#DB2777", "Hanpass": "#06B6D4", "JRF": "#BE001C",
   "WireBarley": "#017A49", "KEB Hana": "#7C3AED", "SBI": "#EA580C",
 };
 const GME_COLOR = "#dc2626";
