@@ -21,6 +21,29 @@ no formula engine needed.
 import sqlite3
 import statistics
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
+
+KST = ZoneInfo("Asia/Seoul")
+
+# KEB Hana doesn't publish new rates on Sat/Sun - its rate page just keeps
+# showing Friday's last quote. Fetching it then only logs a stale repeat, and
+# showing it in the table presents a ~2-day-old rate as if it were live. So
+# on weekends (KST) it's neither fetched (pipeline.run_thailand/run_laos) nor
+# shown in the latest-rates view (dashboard, PNG, Teams). Weekday rows
+# already in the history are untouched, so trend charts/average rankings
+# still include it.
+WEEKDAY_ONLY_PROVIDERS = {"KEB Hana"}
+
+
+def is_weekend_kst(now=None) -> bool:
+    now = now or datetime.now(KST)
+    return now.astimezone(KST).weekday() >= 5
+
+
+def inactive_providers(now=None) -> set:
+    """Providers that shouldn't be fetched or shown right now."""
+    return set(WEEKDAY_ONLY_PROVIDERS) if is_weekend_kst(now) else set()
+
 
 # Base foreign-currency amount each fetch script actually queries - see
 # BASE_THB in fetch_thailand_rates.py, BASE_LAK/BASE_USD/BASE_THB in
@@ -110,8 +133,11 @@ def latest_rates(report: str, db_path):
     finally:
         conn.close()
 
+    inactive = inactive_providers()
     by_corridor = {}
     for corridor, provider, is_gme, krw, fee, total, gap, ts in rows:
+        if provider in inactive:
+            continue
         by_corridor.setdefault(corridor, {"asOf": ts, "providers": []})
         by_corridor[corridor]["providers"].append(
             {

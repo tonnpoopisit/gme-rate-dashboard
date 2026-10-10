@@ -40,9 +40,13 @@ _PIPELINE_LOCK = threading.Lock()
 def run_thailand(gme_manual_krw=None, log_history=True):
     import fetch_thailand_rates as th
 
-    results = th.fetch_all(gme_manual=gme_manual_krw)
-    fetched, failed = len(results), len(th.INPUT_AREA_ROWS) - len(results)
-    stale_pairs = {("THB Bank Deposit", p) for p in th.INPUT_AREA_ROWS if p not in results}
+    inactive = ranking.inactive_providers()
+    results = th.fetch_all(gme_manual=gme_manual_krw, skip_kebhana="KEB Hana" in inactive)
+    # A provider that's off today isn't a failed fetch - don't count it as
+    # one or flag its (hidden) row as stale.
+    expected = [p for p in th.INPUT_AREA_ROWS if p not in inactive]
+    fetched, failed = len(results), len(expected) - len(results)
+    stale_pairs = {("THB Bank Deposit", p) for p in expected if p not in results}
 
     if log_history:
         db_path = gcs_sync.download_db(force=True)
@@ -61,13 +65,11 @@ def run_thailand(gme_manual_krw=None, log_history=True):
 def run_laos(log_history=True):
     import fetch_laos_rates as laos
 
-    fetched_raw = laos.fetch_all()
-    fetched, failed = len(fetched_raw), len(laos.ROW_SOURCES) - len(
-        [k for _, k in laos.ROW_SOURCES if k in fetched_raw]
-    )
-    stale_pairs = {
-        (laos.ROW_TO_CORRIDOR[row], key[0]) for row, key in laos.ROW_SOURCES if key not in fetched_raw
-    }
+    inactive = ranking.inactive_providers()
+    fetched_raw = laos.fetch_all(skip_kebhana="KEB Hana" in inactive)
+    sources = [(row, key) for row, key in laos.ROW_SOURCES if key[0] not in inactive]
+    fetched, failed = len(fetched_raw), len(sources) - len([k for _, k in sources if k in fetched_raw])
+    stale_pairs = {(laos.ROW_TO_CORRIDOR[row], key[0]) for row, key in sources if key not in fetched_raw}
 
     if log_history:
         db_path = gcs_sync.download_db(force=True)
@@ -82,7 +84,7 @@ def run_laos(log_history=True):
                 # Moneygram-BCEL, so that's the baseline here too.
                 "is_gme_baseline": laos.ROW_TO_CORRIDOR[row] == "LAK Bank Deposit" and key[0] == "GME (Moneygram-BCEL)",
             }
-            for row, key in laos.ROW_SOURCES
+            for row, key in sources
             if key in fetched_raw
         ]
         n = price_history.log_run("laos", entries, db_path=db_path)
