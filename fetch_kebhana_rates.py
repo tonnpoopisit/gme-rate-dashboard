@@ -25,12 +25,13 @@ for 2026-08-09 (USD 1,424.80, THB 43.11): live fetch returned 1,425.80 / 43.14
 between when the reference was read and when this ran.
 
 Fee: added separately (not baked into the rate), same convention as most
-other providers in the sheet. Originally assumed flat 5,000 KRW; confirmed
-via check_competitor_fees.py against KEB Hana's real fee-schedule page that
-the correct tier for our amounts (well under the $5,000-equivalent
-electronic-banking threshold) is actually 3,000 KRW - see known_fees.json /
-known_fees.py, which fetch_kebhana_quote() now reads instead of a hardcoded
-constant.
+other providers in the sheet. Set per destination by FEE_BY_CURRENCY below -
+Thailand 7,500 KRW, Laos 5,000 KRW - as confirmed directly with KEB Hana on
+2026-10-16. Deliberately NOT read from known_fees.json / the daily fee
+checker any more: KEB Hana's published fee-schedule page lists only a 3,000
+KRW wire fee plus a 5,000 KRW cable fee, which doesn't match what the bank
+actually quotes for these corridors, and the checker would overwrite a
+hand-confirmed figure with the page's every day at 18:00.
 
 Usage:
     python fetch_kebhana_rates.py
@@ -43,10 +44,11 @@ try:
 except ImportError:  # pragma: no cover
     sys.exit("Missing dependency: pip install playwright && playwright install chromium")
 
-import known_fees
-
 RATE_PAGE_URL = "https://www.hanabank.com/cont/mall/mall15/mall1501/index.jsp"
-FIXED_FEE = 5000  # fallback only - see fetch_kebhana_quote, which reads known_fees.json first
+
+# Send fee in KRW per destination currency (THB = Thailand corridor, USD =
+# Laos corridor) - confirmed with KEB Hana directly, see module docstring.
+FEE_BY_CURRENCY = {"THB": 7500, "USD": 5000}
 
 # currency code -> (Korean name substring as shown in the table, base amount for comparison)
 CURRENCIES = {
@@ -110,7 +112,7 @@ def fetch_kebhana_rates(headless=True, browser=None):
             pw.stop()
 
 
-def compute_quote(rate, amount, fee=FIXED_FEE):
+def compute_quote(rate, amount, fee):
     krw = round(rate * amount)
     return {"rate": rate, "amount": amount, "krw": krw, "fee": fee, "total": krw + fee}
 
@@ -123,13 +125,11 @@ def fetch_kebhana_quote(currency, amount, fee=None, browser=None):
     docstring in fetch_thailand_rates.py for why that matters on Windows;
     if omitted, one is launched and closed just for this call.
 
-    `fee` defaults to whatever check_competitor_fees.py last read off KEB
-    Hana's own fee-schedule page (falls back to FIXED_FEE if that's never
-    run) - see known_fees.py."""
+    `fee` defaults to FEE_BY_CURRENCY[currency] (see the module docstring)."""
     import price_history
 
     if fee is None:
-        fee = known_fees.get_fee("KEB Hana", default=FIXED_FEE)
+        fee = FEE_BY_CURRENCY[currency]
     rates = fetch_kebhana_rates(browser=browser)
     if currency not in rates:
         raise ValueError(f"KEB Hana: could not read the {currency} rate from the live page")
@@ -152,7 +152,7 @@ if __name__ == "__main__":
             print(f"{code}: FAILED to find a rate on the page")
             continue
         rate = rates[code]
-        quote = compute_quote(rate, amount)
+        quote = compute_quote(rate, amount, FEE_BY_CURRENCY[code])
         ref = reference.get(code)
         ref_note = f" (reference: {ref})" if ref is not None else ""
         print(f"{code} send rate: {rate}{ref_note}")

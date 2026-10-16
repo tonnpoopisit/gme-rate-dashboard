@@ -2,20 +2,19 @@
 """
 check_competitor_fees.py
 
-Daily (18:00, separate from the 2-hourly rate schedule - fee schedules
-change far less often than rates) check of the three provider fees that
-can't be read live from the same calculator response used for their rate:
+Daily (18:00, separate from the rate schedule - fee schedules change far
+less often than rates) check of the provider fees that can't be read live
+from the same calculator response used for their rate:
 
     WireBarley (Thailand)      - live quote page shows 0 KRW fee at query
                                   time; real fee is a separate published
                                   tiered schedule (help.wirebarley.com).
-    KEB Hana (Thailand + Laos) - the rate page we scrape has no fee field
-                                  at all; real fee is a separate tiered
-                                  schedule (hanabank.com fee-schedule page).
     E9Pay (Thailand + Laos)    - E9Pay's calculator API's REMIT_FEE field
                                   always reports 0, but E9Pay's own
                                   homepage widget displays the real fee
                                   directly as page text.
+
+KEB Hana is no longer checked here - see the note above CHECKS.
 
 Everyone else's fee (Cross, GmoneyTrans, Hanpass, Coinshot) already comes
 straight from their calculator response on every 2-hourly run - already
@@ -187,9 +186,15 @@ def check_e9pay_fee():
     return int(m.group(1).replace(",", ""))
 
 
+# KEB Hana is intentionally not checked any more: its fee is now a fixed,
+# per-corridor figure confirmed directly with the bank (Thailand 7,500 /
+# Laos 5,000 KRW - see fetch_kebhana_rates.FEE_BY_CURRENCY), and its
+# published fee-schedule page (3,000 KRW wire fee + 5,000 cable fee) doesn't
+# reflect that, so this check would just keep writing a wrong number into
+# known_fees.json every day. check_kebhana_fee() is kept defined, not
+# deleted, in case watching that page for changes is wanted again.
 CHECKS = {
     "WireBarley": (check_wirebarley_fee, "https://help.wirebarley.com/en/support/solutions/articles/156000320230"),
-    "KEB Hana": (check_kebhana_fee, "https://www.hanabank.com/cont/mall/mall09/mall0906/mall090603/index.jsp"),
     "E9Pay": (check_e9pay_fee, "https://www.e9pay.co.kr/"),
 }
 
